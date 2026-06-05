@@ -488,6 +488,7 @@ class FilterPanel(QWidget):
             w_max.setFixedWidth(70)
             skill_grid.addWidget(w_min, row, col * 3 + 1)
             skill_grid.addWidget(w_max, row, col * 3 + 2)
+            self.skill_filters[key] = {'min': w_min, 'max': w_max}
         
         skill_group = QGroupBox("技能筛选")
         skill_group.setLayout(skill_grid)
@@ -552,10 +553,12 @@ class MainWindow(QMainWindow):
         self.model = PlayerTableModel()
         self.current_file = None
         self.show_latest_only = True  # 默认只显示最新记录
+        self.sort_column = -1  # 当前排序列，-1表示未排序
+        self.sort_order = Qt.SortOrder.AscendingOrder  # 当前排序方向
         self.setup_ui()
     
     def setup_ui(self):
-        self.setWindowTitle("BuzzerBeater 数据查看器")
+        self.setWindowTitle("BuzzerBeater 数据查看器 Ver1.1")
         self.setGeometry(100, 100, 1600, 900)
         
         central = QWidget()
@@ -623,6 +626,7 @@ class MainWindow(QMainWindow):
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.table.doubleClicked.connect(self.on_table_double_click)
+        self.table.horizontalHeader().sectionClicked.connect(self.on_header_clicked)
         right_layout.addWidget(self.table)
         
         main_layout.addWidget(right)
@@ -804,16 +808,32 @@ class MainWindow(QMainWindow):
         self.table.setRowCount(len(matches))
         for row_idx, player in enumerate(matches):
             for col in range(len(columns)):
-                item = QTableWidgetItem(self.model.data(player, col))
                 key, _ = columns[col]
+                raw_value = player.get(key)
+                item = QTableWidgetItem(self.model.data(player, col))
+                # 为数值列设置排序用的数值
+                if key in ('id', 'age', 'salary', 'potential',
+                           'jump_shot', 'jump_range', 'perim_def',
+                           'handling', 'driving', 'passing',
+                           'inside_shot', 'inside_def', 'rebound', 'shot_block'):
+                    num_val = raw_value
+                    if key == 'potential':
+                        num_val = PlayerTableModel.potential_to_number(raw_value)
+                    if num_val is None:
+                        num_val = 0
+                    item.setData(Qt.ItemDataRole.UserRole, float(num_val))
                 # 如果是ID列，特殊标记以便双击查看历史
                 if key == 'id':
-                    item.setData(Qt.ItemDataRole.UserRole, player.get('id'))
+                    item.setData(Qt.ItemDataRole.UserRole + 1, player.get('id'))
                     item.setForeground(QColor(100, 180, 255))  # 蓝色显示，提示可点击
                 self.table.setItem(row_idx, col, item)
         
         # 调整列宽
         header.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        
+        # 应用排序
+        if self.sort_column >= 0:
+            self.table.sortItems(self.sort_column, self.sort_order)
         
         self.lbl_count.setText(f"共 {len(matches)} 条")
         self.statusBar().showMessage(f"显示 {len(matches)} / {len(src)} 条记录")
@@ -821,11 +841,51 @@ class MainWindow(QMainWindow):
     def update_table(self):
         self.filter_table()
     
+    def on_header_clicked(self, col):
+        """点击列头排序"""
+        if self.sort_column == col:
+            # 同一列，切换排序方向
+            self.sort_order = Qt.SortOrder.DescendingOrder if self.sort_order == Qt.SortOrder.AscendingOrder else Qt.SortOrder.AscendingOrder
+        else:
+            self.sort_column = col
+            self.sort_order = Qt.SortOrder.AscendingOrder
+        
+        # 自定义排序：数值列按UserRole排序，文字列按文本排序
+        key, _ = self.model.columns[col]
+        numeric_keys = {'id', 'age', 'salary', 'potential',
+                        'jump_shot', 'jump_range', 'perim_def',
+                        'handling', 'driving', 'passing',
+                        'inside_shot', 'inside_def', 'rebound', 'shot_block'}
+        
+        if key in numeric_keys:
+            # 数值排序：使用UserRole中存储的数值
+            self.table.sortItems(col, self.sort_order)
+            # QTableWidget默认按文本排序，需要手动按数值重排
+            rows_data = []
+            for row in range(self.table.rowCount()):
+                item = self.table.item(row, col)
+                num_val = item.data(Qt.ItemDataRole.UserRole) if item and item.data(Qt.ItemDataRole.UserRole) is not None else 0
+                row_items = []
+                for c in range(self.table.columnCount()):
+                    row_items.append(self.table.takeItem(row, c))
+                rows_data.append((num_val, row_items))
+            
+            # 排序
+            rows_data.sort(key=lambda x: x[0], reverse=(self.sort_order == Qt.SortOrder.DescendingOrder))
+            
+            # 重新填入
+            for row_idx, (_, row_items) in enumerate(rows_data):
+                for c, item in enumerate(row_items):
+                    if item:
+                        self.table.setItem(row_idx, c, item)
+        else:
+            self.table.sortItems(col, self.sort_order)
+    
     def on_table_double_click(self, index):
         row = index.row()
         item = self.table.item(row, 0)  # ID列
         if item:
-            player_id = item.data(Qt.ItemDataRole.UserRole)
+            player_id = item.data(Qt.ItemDataRole.UserRole + 1)
             if player_id:
                 # 获取该ID的所有历史记录
                 records = self.model.get_history(player_id)
