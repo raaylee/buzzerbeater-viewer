@@ -56,7 +56,7 @@ class PlayerDetailDialog(QDialog):
             ("外线防守", "perim_def"), ("控球能力", "handling"),
             ("运球能力", "driving"), ("传球能力", "passing"),
             ("内线投篮", "inside_shot"), ("内线防守", "inside_def"),
-            ("篮板能力", "rebound"), ("盖帽能��", "shot_block"),
+            ("篮板能力", "rebound"), ("盖帽能力", "shot_block"),
         ]
         for label, key in skills:
             value = p.get(key, 0)
@@ -99,7 +99,7 @@ class PlayerHistoryDialog(QDialog):
             ("采集时间", "scrapedAt"), ("薪金", "salary"), ("年龄", "age"),
             ("跳投", "jump_shot"), ("范围", "jump_range"), ("外防", "perim_def"),
             ("控球", "handling"), ("运球", "driving"), ("传球", "passing"),
-            ("内���", "inside_shot"), ("内防", "inside_def"), ("篮板", "rebound"),
+            ("内投", "inside_shot"), ("内防", "inside_def"), ("篮板", "rebound"),
             ("盖帽", "shot_block"),
         ]
 
@@ -175,7 +175,7 @@ class PlayerHistoryDialog(QDialog):
                 to_delete = set()
                 for idx in self.selected_rows:
                     rec = sorted_records[idx]
-                    # 通过 id() 定位原始列表中要删���的记录
+                    # 通过 id() 定位原始列表中要删   的记录
                     for orig in list(self.records):
                         if id(orig) == id(rec):
                             to_delete.add(id(orig))
@@ -380,7 +380,7 @@ class PlayerTableModel:
             if pid not in seen:
                 seen[pid] = p
             else:
-                # ���较采集时间，保留最新的
+                #    较采集时间，保留最新的
                 old_time = seen[pid].get('scrapedAt', '')
                 new_time = p.get('scrapedAt', '')
                 if new_time > old_time:
